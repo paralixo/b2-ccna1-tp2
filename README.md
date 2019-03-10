@@ -197,6 +197,115 @@ On peut aussi utiliser (pour être sûr) :
 
 ## 3. NTP Server
 
+On commence par ajouter le serveur français au fichier chrony.conf:
+
+
+```
+# Replace XXX with needed server names
+server 0.europe.pool.ntp.org
+server 1.europe.pool.ntp.org
+server 2.europe.pool.ntp.org
+server 3.europe.pool.ntp.org
+```
+
+
+Ouverture du port 123 utilisé par NTP:
+```
+[sombrun@router1 ~]$ sudo firewall-cmd --add-port=123/udp --perm 
+[sudo] Mot de passe de sombrun : 
+success
+[sombrun@router1 ~]$ sudo firewall-cmd --reload
+success
+```
+Installation de chrony :
+```
+[sombrun@router1 ~]$ sudo yum -y install chrony
+```
+```
+[sombrun@router1 ~]$ sudo systemctl start chronyd
+[sombrun@router1 ~]$ systemctl status chronyd
+● chronyd.service - NTP client/server
+Loaded: loaded (/usr/lib/systemd/system/chronyd.service; enabled; vendor preset: enabled)
+Active: active (running) since dim. 2019-03-10 19:12:05 CET; 3s ago
+```
+Etat de synchronisation NTP :
+```
+[sombrun@router1 ~]$ chronyc sources
+210 Number of sources = 4
+MS Name/IP address         Stratum Poll Reach LastRx Last sample               
+===============================================================================
+^? syrte8.obspm.fr               2   6     3     3   -933ms[ -933ms] +/-   20ms
+^? +ntp-p7.obspm.fr              1   6     3     2   -921ms[ -921ms] +/-  123ms
+^? ip235.ip-151-80-165.eu        2   6     3     3   -933ms[ -933ms] +/-   44ms
+^? v.bsod.fr                     2   6     1     8    -32ms[  -32ms] +/-   89ms
+ 
+```
+Client1:
+
+Chronyc sources :
+```
+[sombrun@client1 ~]$ chronyc sources
+210 Number of sources = 1
+MS Name/IP address         Stratum Poll Reach LastRx Last sample               
+===============================================================================
+^? router1                       2   6     1     2    +76us[  +76us] +/-   23ms
+```
+Le router1 est donc serveur NTP pour client1
+
+Chronyc tracking
+```
+[sombrun@client1 ~]$ chronyc tracking
+Reference ID    : 7F7F0101 ()
+Stratum         : 10
+Ref time (UTC)  : Wen Mar 10 21:18:18 2019
+System time     : 0.000000000 seconds slow of NTP time
+Last offset     : +0.000000000 seconds
+RMS offset      : 0.000000000 seconds
+Frequency       : 0.000 ppm slow
+Residual freq   : +0.000 ppm
+Skew            : 0.000 ppm
+Root delay      : 0.000000000 seconds
+Root dispersion : 0.000000000 seconds
+Update interval : 0.0 seconds
+Leap status     : Normal
+```
+Pour server1 :
+
+```
+[sombrun@serveur1 ~]$ chronyc tracking
+Reference ID    : 7F7F0101 ()
+Stratum         : 10
+Ref time (UTC)  : Wen Mar 10 21:38:10 2019
+System time     : 0.000000000 seconds slow of NTP time
+Last offset     : +0.000000000 seconds
+RMS offset      : 0.000000000 seconds
+Frequency       : 0.000 ppm slow
+Residual freq   : +0.000 ppm
+Skew            : 0.000 ppm
+Root delay      : 0.000000000 seconds
+Root dispersion : 0.000000000 seconds
+Update interval : 0.0 seconds
+Leap status     : Normal
+```
+Pour router2
+
+```
+[sombrun@router2 ~]$ chronyc tracking
+Reference ID    : 7F7F0101 ()
+Stratum         : 10
+Ref time (UTC)  : Wen Mar 10 22:07:54 2019
+System time     : 0.000000000 seconds slow of NTP time
+Last offset     : +0.000000000 seconds
+RMS offset      : 0.000000000 seconds
+Frequency       : 0.000 ppm slow
+Residual freq   : +0.000 ppm
+Skew            : 0.000 ppm
+Root delay      : 0.000000000 seconds
+Root dispersion : 0.000000000 seconds
+Update interval : 0.0 seconds
+Leap status     : Normal
+```
+
 ## 4. Web Server
 
 Sur `server1`, on installe les dépôts EPEL et NGINX :
