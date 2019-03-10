@@ -50,6 +50,7 @@ On modifie le fichier hosts pour ne plus avoir à taper des adresses IPs (plus s
 	10.2.12.3   router2 router2.net12.b2
 
 ### Routage statique
+
 On commence par activer l'IPv4 Forwarding sur `router1`et `router2` (pour leur permettre de traiter des paquets IP qui ne leur sont pas destinés) : 
 
 	$ sudo sysctl -w net.ipv4.conf.all.forwarding=1
@@ -58,25 +59,26 @@ Modification permanente dans le fichier `/etc/sysctl.conf`.
 
 Sur `router1`, on ajoute une route vers `net2` : 
 
-	sudo ip route add 10.2.2.0/24 via 10.2.12.3 dev enp0s9
+	$ sudo ip route add 10.2.2.0/24 via 10.2.12.3 dev enp0s9
 
 Sur `router2`, on ajoute une route vers `net1` : 
 
-	sudo ip route add 10.2.1.0/24 via 10.2.12.2 dev enp0s9
+	$ sudo ip route add 10.2.1.0/24 via 10.2.12.2 dev enp0s9
 	
 Sur `client1`, on ajoute une route vers `net2` : 
 
-	sudo ip route add 10.2.2.0/24 via 10.2.1.254 dev enp0s8
+	$ sudo ip route add 10.2.2.0/24 via 10.2.1.254 dev enp0s8
 
 Sur `server1`, on ajoute une route vers `net1` : 
 
-	sudo ip route add 10.2.1.0/24 via 10.2.2.254 dev enp0s8
+	$  sudo ip route add 10.2.1.0/24 via 10.2.2.254 dev enp0s8
 
 Les modifications des routes ci-dessus sont temporaires, si on veut une modification permanente on écrit dans `/etc/sysconfig/network-scripts/route-<interface> `.
 
-On va maintenant tester le bon fonctionnement de notre réseau. On va ping `client1` et `server1` qui ne se connaissent pas : 
+#### Test des routes
 
-ping client1 & serve1
+On va maintenant tester le bon fonctionnement de notre réseau. 
+On va ping `client1` et `server1` qui ne se connaissent pas : 
 
 	[florian@client1 ~]$ ping server1
 	PING server1 (10.2.2.10) 56(84) bytes of data.
@@ -88,7 +90,7 @@ ping client1 & serve1
 	3 packets transmitted, 3 received, 0% packet loss, time 2011ms
 	rtt min/avg/max/mdev = 1.246/1.304/1.346/0.059 ms
 	
-ping router1 & server1
+On va essayer de ping `server1` depuis `router1` : 
 
 	[florian@router1 ~]$ ping server1
 	PING server1 (10.2.2.10) 56(84) bytes of data.
@@ -96,24 +98,32 @@ ping router1 & server1
 	--- server1 ping statistics ---
 	3 packets transmitted, 0 received, 100% packet loss, time 2006ms
 
-Pourquoi ? -> Le router1 connais server1 mais server1 ne connais pas router1 ducoup il ne peut pas lui répondre
+Pourquoi ça ne fonctionne pas ? Le `router1` connait  `server1` mais pas l'inverse donc `server1` ne peut pas répondre.
 
 
-## 3. Visualisation du routage avec Wireshark
+### 3. Visualisation du routage avec Wireshark
 
-### net12
-On remarque 8 paquets : 6 pings/pongs et 2 paquets ARP
+On ping `server1` depuis `client1`, on observe le traffic sur `net12`puis `net2`.
 
-### net2
-On remarque plus de paquets que précedement : les pings/pongs, les 2 paquets ARP mais aussi un paquet SSH (dû à la connexion SSH) et un paquet TCP (je ne sais pas pourquoi)
+#### net12
+
+On observe 8 paquets : 
+- 6 pings/pongs
+- 2 paquets ARP
+
+Ça nous confirme que les paquets passent bien par `net12`, le routage fonctionne.
+
+#### net2
+On remarque plus de paquets que précédemment : les pings/pongs, les 2 paquets ARP mais aussi un paquet SSH (dû à la connexion SSH) et un paquet TCP (je ne sais pas pourquoi).
 
 Les pings/pongs sont normaux. Et on remarque que la table ARP "demande son chemin" tout du long du processus (dans net12 et net2).
+
 
 # II. NAT et services d'infra
 
 ## 1. Mise en place du NAT
 
-On vérifie que la NAT fonctionne bien sur router1 avec un `curl www.google.com`
+On vérifie que la NAT fonctionne bien sur `router1` avec un `curl www.google.com`
 Ensuite : 
 
 	$ sudo vi /etc/sysconfig/network-scripts/ifcfg-enp0sx
@@ -125,23 +135,69 @@ On fait la même chose sur le `router2` (il n'y a pas de NAT).
 	$ sudo firewall-cmd --add-masquerade --zone=public --permanent
 	$ sudo systemctl restart firewalld
 
-On ajoute une route par défaut sur client1 et router2 : 
-client1
+On ajoute des routes par défaut sur nos autres VMs : 
+`client1` : 
 
 	$ sudo ip route add default via 10.2.1.254 dev enp0s8
 
-router2
+`router2` :
 
 	$ sudo ip route add default via 10.2.12.2 dev enp0s9
 
-server1
+`server1` : 
 
 	sudo ip route add default via 10.2.2.254 dev enp0s8
 
 On `curl www.google.com` et `ping 8.8.8.8` sur toutes les VMs pour vérifier que tout fonctionne.
 
+## 2. DHCP Server
 
-## 4. Web server
+On renomme `client1.net1.b2` en `dhcp-server.net1.b2` : 
+
+	$ echo 'dhcp-server.net1.b2' | sudo tee /etc/hostname
+
+> Ou on renomme juste la VM dans VirtualBox, je n'étais pas sûr de ce qui était demandé ici.
+
+On installe le paquet DHCP : 
+
+	$ sudo yum install -y dhcp
+
+On récupère [le fichier d'exemple de configuration DHCP](https://github.com/It4lik/B2-Reseau-2018/blob/master/tp/2/dhcp/dhcpd.conf) et on le mets dans `/etc/dhcp/dhcpd.conf` (soit par la commande `scp` depuis le Powershell, soit en réécrivant le fichier).
+
+On démarre puis on vérifie le status du serveur DHCP : 
+
+	$ sudo systemctl start dhcpd
+	$ sudo systemctl status dhcpd
+
+#### Test
+
+On clone notre VM patron. On lui donne une interface dans net1. On configure l'interface en DHCP : 
+
+	$ sudo cat /etc/sysconfig/network-scripts/ifcfg-enp0s8
+	TYPE=Ethernet
+	BOOTPROTO=dhcp
+	NAME=enp0s8
+	DEVICE=enp0s8
+	ONBOOT=yes
+	ZONE=public
+
+	$ sudo ifdown enp0s8
+	$ sudo ifup enp0s8
+
+On vérifie notre adresse IP : 
+
+	$ ip a
+
+On voit que notre adresse IP est `10.2.1.50` (donc dans la plage d'IP définie dans le `dhcpd.conf`).
+
+On peut aussi utiliser (pour être sûr) : 
+
+	$ sudo dhclient -v -r
+	$ ip a
+
+## 3. NTP Server
+
+## 4. Web Server
 
 Sur `server1`, on installe les dépôts EPEL et NGINX :
 
